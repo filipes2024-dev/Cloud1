@@ -1,0 +1,6 @@
+# Audio transcription dependencies
+openai-whisper>=20231117
+# ffmpeg must be installed on the system:
+# Ubuntu/Debian: sudo apt install ffmpeg
+# macOS:         brew install ffmpeg
+# Windows:       https://ffmpeg.org/download.html
