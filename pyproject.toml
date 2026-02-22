@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "investment-ai-advisor"
+version = "1.0.0"
+description = "Framework de assessoria de investimentos com IA integrada (Claude)"
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.42.0",
+    "yfinance>=0.2.36",
+    "pandas>=2.1.0",
+    "numpy>=1.26.0",
+    "rich>=13.7.0",
+    "prompt-toolkit>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+investment-advisor = "investment_advisor.main:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
