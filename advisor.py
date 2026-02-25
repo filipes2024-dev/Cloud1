@@ -17,7 +17,10 @@ from financial_tools import (
     get_sector_analysis,
     get_dividends_history,
     calculate_investment_metrics,
+    get_technical_indicators,
 )
+from stock_screener import screen_stocks
+from portfolio_analyzer import analyze_portfolio
 
 MODEL = "claude-opus-4-6"
 
@@ -25,21 +28,29 @@ SYSTEM_PROMPT = """Você é um especialista em investimentos e analista financei
 
 Suas capacidades incluem:
 - Análise fundamentalista completa (DRE, balanço patrimonial, fluxo de caixa)
-- Análise técnica e de tendências de mercado
+- Análise técnica avançada (RSI, MACD, Bollinger Bands, médias móveis, suportes/resistências)
 - Valuation por múltiplos (P/E, P/B, EV/EBITDA, P/S) e DCF
 - Estratégias: value investing, growth investing, dividend investing, momentum
 - Conhecimento profundo de ETFs, FIIs, BDRs, ações BR e EUA
 - Gestão de risco, diversificação de portfólio e alocação de ativos
 - Macro economia, juros, câmbio e seu impacto nos investimentos
-- Análise ESG e tendências de mercado emergentes
+- Stock screening: filtrar ações por critérios (valor, crescimento, dividendos, momentum, qualidade)
+- Análise de portfólio: correlação, diversificação, risco, Sharpe ratio e sugestões de rebalanceamento
 
 Ao analisar empresas:
 1. Sempre busque os dados reais usando as ferramentas disponíveis
-2. Contextualize os números (bom/ruim vs. setor/histórico)
-3. Apresente teses de investimento com bull case e bear case
-4. Seja direto sobre riscos e incertezas
-5. Adapte a linguagem ao contexto (técnica para profissionais, simples para iniciantes)
-6. Forneça insights acionáveis, não apenas descrições
+2. Use indicadores técnicos (RSI, MACD, Bollinger) para complementar a análise fundamentalista
+3. Contextualize os números (bom/ruim vs. setor/histórico)
+4. Apresente teses de investimento com bull case e bear case
+5. Seja direto sobre riscos e incertezas
+6. Adapte a linguagem ao contexto (técnica para profissionais, simples para iniciantes)
+7. Forneça insights acionáveis, não apenas descrições
+8. Quando pedirem dicas de investimento, use o screener para encontrar oportunidades reais
+
+Ao recomendar ações:
+- Use o screener para filtrar oportunidades por estratégia
+- Combine análise fundamentalista com análise técnica
+- Sempre mencione riscos e que resultados passados não garantem retornos futuros
 
 Responda sempre em português brasileiro. Seja objetivo, preciso e útil."""
 
@@ -131,6 +142,76 @@ TOOLS = [
             "required": ["ticker"],
         },
     },
+    {
+        "name": "get_technical_indicators",
+        "description": "Calcula indicadores técnicos completos: RSI (14), MACD (12,26,9), Bollinger Bands (20,2), médias móveis (SMA 20/50/200), suportes/resistências, sinais de trading e tendência geral.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ticker": {"type": "string", "description": "Código da ação"},
+                "period": {
+                    "type": "string",
+                    "description": "Período de análise: 3mo, 6mo, 1y, 2y (padrão: 6mo)",
+                    "default": "6mo",
+                },
+            },
+            "required": ["ticker"],
+        },
+    },
+    {
+        "name": "screen_stocks",
+        "description": "Filtra e rankeia ações por estratégia de investimento. Estratégias: 'value' (baixo P/E e P/B), 'growth' (alto crescimento), 'dividend' (alto yield), 'momentum' (tendência de alta), 'quality' (alto ROE e margens), 'undervalued' (preço abaixo do justo). Mercados: 'us' (EUA), 'br' (Brasil), 'fiis' (FIIs brasileiros).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "strategy": {
+                    "type": "string",
+                    "description": "Estratégia: value, growth, dividend, momentum, quality, undervalued",
+                },
+                "market": {
+                    "type": "string",
+                    "description": "Mercado: us, br, fiis (padrão: us)",
+                    "default": "us",
+                },
+                "custom_tickers": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de tickers personalizada (opcional, sobrescreve market)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Número máximo de resultados (padrão: 10)",
+                    "default": 10,
+                },
+            },
+            "required": ["strategy"],
+        },
+    },
+    {
+        "name": "analyze_portfolio",
+        "description": "Analisa uma carteira de investimentos: retorno, volatilidade, Sharpe ratio, correlação entre ativos, diversificação, max drawdown e sugestões de melhoria.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tickers": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de tickers da carteira (mínimo 2)",
+                },
+                "weights": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "description": "Pesos de cada ativo (devem somar 1.0). Se omitido, assume pesos iguais.",
+                },
+                "period": {
+                    "type": "string",
+                    "description": "Período de análise: 1mo, 3mo, 6mo, 1y, 2y, 5y (padrão: 1y)",
+                    "default": "1y",
+                },
+            },
+            "required": ["tickers"],
+        },
+    },
 ]
 
 TOOL_FUNCTIONS = {
@@ -141,6 +222,9 @@ TOOL_FUNCTIONS = {
     "get_sector_analysis": get_sector_analysis,
     "get_dividends_history": get_dividends_history,
     "calculate_investment_metrics": calculate_investment_metrics,
+    "get_technical_indicators": get_technical_indicators,
+    "screen_stocks": screen_stocks,
+    "analyze_portfolio": analyze_portfolio,
 }
 
 

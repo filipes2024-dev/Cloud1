@@ -514,3 +514,160 @@ def _interpret_score(score: int) -> str:
         return "Fraco - empresa com fundamentos preocupantes"
     else:
         return "Muito fraco - alto risco, análise aprofundada necessária"
+
+
+def get_technical_indicators(ticker: str, period: str = "6mo") -> dict[str, Any]:
+    """
+    Calcula indicadores técnicos: RSI, MACD, Bollinger Bands,
+    médias móveis, suportes/resistências e sinais de trading.
+    """
+    err = _check_yfinance()
+    if err:
+        return err
+
+    try:
+        stock = yf.Ticker(ticker.upper())
+        hist = stock.history(period=period)
+
+        if hist.empty or len(hist) < 26:
+            return {"erro": f"Dados insuficientes para análise técnica de {ticker}"}
+
+        close = hist["Close"]
+
+        # --- RSI (14 períodos) ---
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0.0)
+        loss = (-delta).where(delta < 0, 0.0)
+        avg_gain = gain.rolling(window=14, min_periods=14).mean()
+        avg_loss = loss.rolling(window=14, min_periods=14).mean()
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+        rsi_current = round(float(rsi.iloc[-1]), 2) if not rsi.empty else None
+
+        # --- MACD (12, 26, 9) ---
+        ema12 = close.ewm(span=12, adjust=False).mean()
+        ema26 = close.ewm(span=26, adjust=False).mean()
+        macd_line = ema12 - ema26
+        signal_line = macd_line.ewm(span=9, adjust=False).mean()
+        macd_hist = macd_line - signal_line
+
+        macd_current = round(float(macd_line.iloc[-1]), 4)
+        signal_current = round(float(signal_line.iloc[-1]), 4)
+        macd_hist_current = round(float(macd_hist.iloc[-1]), 4)
+
+        # --- Bollinger Bands (20, 2) ---
+        sma20 = close.rolling(window=20).mean()
+        std20 = close.rolling(window=20).std()
+        bb_upper = sma20 + (std20 * 2)
+        bb_lower = sma20 - (std20 * 2)
+
+        bb_upper_val = round(float(bb_upper.iloc[-1]), 2)
+        bb_lower_val = round(float(bb_lower.iloc[-1]), 2)
+        bb_middle_val = round(float(sma20.iloc[-1]), 2)
+        preco_atual = round(float(close.iloc[-1]), 2)
+
+        # Posição relativa nas bandas (0 = banda inferior, 1 = banda superior)
+        bb_width = bb_upper_val - bb_lower_val
+        bb_position = round((preco_atual - bb_lower_val) / bb_width, 2) if bb_width > 0 else 0.5
+
+        # --- Médias Móveis ---
+        sma50 = close.rolling(window=50).mean() if len(close) >= 50 else None
+        sma200 = close.rolling(window=200).mean() if len(close) >= 200 else None
+
+        sma50_val = round(float(sma50.iloc[-1]), 2) if sma50 is not None and not sma50.empty else None
+        sma200_val = round(float(sma200.iloc[-1]), 2) if sma200 is not None and not sma200.empty else None
+
+        # --- Suportes e Resistências (pivô simples) ---
+        high = float(hist["High"].iloc[-1])
+        low = float(hist["Low"].iloc[-1])
+        pivot = round((high + low + preco_atual) / 3, 2)
+        suporte_1 = round(2 * pivot - high, 2)
+        resistencia_1 = round(2 * pivot - low, 2)
+        suporte_2 = round(pivot - (high - low), 2)
+        resistencia_2 = round(pivot + (high - low), 2)
+
+        # --- Volume médio recente vs histórico ---
+        vol_5d = float(hist["Volume"].tail(5).mean())
+        vol_20d = float(hist["Volume"].tail(20).mean())
+        volume_ratio = round(vol_5d / vol_20d, 2) if vol_20d > 0 else 1.0
+
+        # --- Sinais ---
+        sinais = []
+
+        if rsi_current is not None:
+            if rsi_current > 70:
+                sinais.append("RSI sobrecomprado (>70) - possível correção")
+            elif rsi_current < 30:
+                sinais.append("RSI sobrevendido (<30) - possível oportunidade de compra")
+
+        if macd_hist_current > 0 and float(macd_hist.iloc[-2]) <= 0:
+            sinais.append("MACD cruzou acima do sinal - sinal de compra")
+        elif macd_hist_current < 0 and float(macd_hist.iloc[-2]) >= 0:
+            sinais.append("MACD cruzou abaixo do sinal - sinal de venda")
+
+        if bb_position > 0.95:
+            sinais.append("Preço próximo à banda superior de Bollinger - possível sobrecompra")
+        elif bb_position < 0.05:
+            sinais.append("Preço próximo à banda inferior de Bollinger - possível sobrevenda")
+
+        if sma50_val and sma200_val:
+            if sma50_val > sma200_val and preco_atual > sma50_val:
+                sinais.append("Golden Cross ativo (SMA50 > SMA200) - tendência de alta")
+            elif sma50_val < sma200_val and preco_atual < sma50_val:
+                sinais.append("Death Cross ativo (SMA50 < SMA200) - tendência de baixa")
+
+        if volume_ratio > 1.5:
+            sinais.append(f"Volume recente {volume_ratio}x acima da média - atenção ao movimento")
+
+        # --- Tendência geral ---
+        if preco_atual > bb_middle_val and (rsi_current or 50) > 50 and macd_hist_current > 0:
+            tendencia = "Alta"
+        elif preco_atual < bb_middle_val and (rsi_current or 50) < 50 and macd_hist_current < 0:
+            tendencia = "Baixa"
+        else:
+            tendencia = "Lateral/Indefinida"
+
+        return {
+            "ticker": ticker.upper(),
+            "periodo_analise": period,
+            "preco_atual": preco_atual,
+            "tendencia_geral": tendencia,
+            "rsi_14": rsi_current,
+            "rsi_interpretacao": (
+                "Sobrecomprado" if (rsi_current or 50) > 70
+                else "Sobrevendido" if (rsi_current or 50) < 30
+                else "Neutro"
+            ),
+            "macd": {
+                "linha_macd": macd_current,
+                "linha_sinal": signal_current,
+                "histograma": macd_hist_current,
+                "interpretacao": "Bullish" if macd_hist_current > 0 else "Bearish",
+            },
+            "bollinger_bands": {
+                "banda_superior": bb_upper_val,
+                "banda_media": bb_middle_val,
+                "banda_inferior": bb_lower_val,
+                "posicao_relativa": bb_position,
+            },
+            "medias_moveis": {
+                "sma_20": bb_middle_val,
+                "sma_50": sma50_val,
+                "sma_200": sma200_val,
+            },
+            "suporte_resistencia": {
+                "pivo": pivot,
+                "suporte_1": suporte_1,
+                "suporte_2": suporte_2,
+                "resistencia_1": resistencia_1,
+                "resistencia_2": resistencia_2,
+            },
+            "volume": {
+                "ratio_5d_vs_20d": volume_ratio,
+                "interpretacao": "Volume elevado" if volume_ratio > 1.5 else "Volume normal" if volume_ratio > 0.7 else "Volume baixo",
+            },
+            "sinais_tecnicos": sinais if sinais else ["Sem sinais relevantes no momento"],
+        }
+
+    except Exception as e:
+        return {"erro": f"Erro na análise técnica de {ticker}: {str(e)}"}
