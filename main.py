@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Investment Analysis Framework
-Assistente inteligente de investimentos com IA (Claude Opus 4.6).
+Assistente inteligente de investimentos com IA (DeepSeek).
 
 Uso:
     python main.py                    # modo interativo
@@ -35,13 +35,13 @@ from report_generator import (
 
 
 def _check_api_key():
-    key = os.environ.get("ANTHROPIC_API_KEY")
+    key = os.environ.get("DEEPSEEK_API_KEY")
     if not key:
         print_error(
-            "ANTHROPIC_API_KEY não configurada!\n"
+            "DEEPSEEK_API_KEY não configurada!\n"
             "  1. Copie .env.example para .env\n"
-            "  2. Adicione sua chave: ANTHROPIC_API_KEY=sk-ant-...\n"
-            "  Ou exporte: export ANTHROPIC_API_KEY=sk-ant-..."
+            "  2. Adicione sua chave: DEEPSEEK_API_KEY=sk-...\n"
+            "  Ou exporte: export DEEPSEEK_API_KEY=sk-..."
         )
         sys.exit(1)
     return key

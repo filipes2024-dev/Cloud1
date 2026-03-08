@@ -1,5 +1,5 @@
 """
-Advisor de investimentos com IA usando Claude API.
+Advisor de investimentos com IA usando DeepSeek API.
 Integra ferramentas de dados financeiros reais com análise via LLM.
 """
 
@@ -7,7 +7,7 @@ import json
 import os
 from typing import Any
 
-import anthropic
+from openai import OpenAI
 
 from financial_tools import (
     get_stock_overview,
@@ -22,7 +22,8 @@ from financial_tools import (
 from stock_screener import screen_stocks
 from portfolio_analyzer import analyze_portfolio
 
-MODEL = "claude-opus-4-6"
+MODEL = "deepseek-chat"
+BASE_URL = "https://api.deepseek.com"
 
 SYSTEM_PROMPT = """Você é um especialista em investimentos e analista financeiro sênior com mais de 20 anos de experiência nos mercados brasileiro e internacional.
 
@@ -56,160 +57,190 @@ Responda sempre em português brasileiro. Seja objetivo, preciso e útil."""
 
 TOOLS = [
     {
-        "name": "get_stock_overview",
-        "description": "Obtém visão geral de uma ação: preço atual, P/E, market cap, dividend yield, beta, target dos analistas e recomendação de consenso.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ticker": {
-                    "type": "string",
-                    "description": "Código da ação (ex: AAPL, PETR4.SA, VALE3.SA, ITUB4.SA)",
-                }
+        "type": "function",
+        "function": {
+            "name": "get_stock_overview",
+            "description": "Obtém visão geral de uma ação: preço atual, P/E, market cap, dividend yield, beta, target dos analistas e recomendação de consenso.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {
+                        "type": "string",
+                        "description": "Código da ação (ex: AAPL, PETR4.SA, VALE3.SA, ITUB4.SA)",
+                    }
+                },
+                "required": ["ticker"],
             },
-            "required": ["ticker"],
         },
     },
     {
-        "name": "get_financial_statements",
-        "description": "Obtém demonstrações financeiras completas: DRE (receita, EBITDA, lucro), balanço patrimonial (ativos, dívidas, patrimônio) e fluxo de caixa.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ticker": {"type": "string", "description": "Código da ação"}
+        "type": "function",
+        "function": {
+            "name": "get_financial_statements",
+            "description": "Obtém demonstrações financeiras completas: DRE (receita, EBITDA, lucro), balanço patrimonial (ativos, dívidas, patrimônio) e fluxo de caixa.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Código da ação"}
+                },
+                "required": ["ticker"],
             },
-            "required": ["ticker"],
         },
     },
     {
-        "name": "get_price_history",
-        "description": "Retorna histórico de preços e performance no período selecionado.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ticker": {"type": "string", "description": "Código da ação"},
-                "period": {
-                    "type": "string",
-                    "description": "Período: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, ytd, max",
-                    "default": "1y",
+        "type": "function",
+        "function": {
+            "name": "get_price_history",
+            "description": "Retorna histórico de preços e performance no período selecionado.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Código da ação"},
+                    "period": {
+                        "type": "string",
+                        "description": "Período: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, ytd, max",
+                        "default": "1y",
+                    },
                 },
+                "required": ["ticker"],
             },
-            "required": ["ticker"],
         },
     },
     {
-        "name": "get_market_indices",
-        "description": "Obtém cotações dos principais índices globais (S&P 500, IBOVESPA, NASDAQ, DAX, Nikkei), commodities (ouro, petróleo), câmbio (dólar/real) e Bitcoin.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": [],
+        "type": "function",
+        "function": {
+            "name": "get_market_indices",
+            "description": "Obtém cotações dos principais índices globais (S&P 500, IBOVESPA, NASDAQ, DAX, Nikkei), commodities (ouro, petróleo), câmbio (dólar/real) e Bitcoin.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
         },
     },
     {
-        "name": "get_sector_analysis",
-        "description": "Compara a empresa com principais concorrentes do mesmo setor: P/E, P/B, margens, crescimento e dividend yield.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ticker": {"type": "string", "description": "Código da ação"}
+        "type": "function",
+        "function": {
+            "name": "get_sector_analysis",
+            "description": "Compara a empresa com principais concorrentes do mesmo setor: P/E, P/B, margens, crescimento e dividend yield.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Código da ação"}
+                },
+                "required": ["ticker"],
             },
-            "required": ["ticker"],
         },
     },
     {
-        "name": "get_dividends_history",
-        "description": "Retorna histórico de dividendos e splits dos últimos 3 anos, dividend yield atual e payout ratio.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ticker": {"type": "string", "description": "Código da ação"}
+        "type": "function",
+        "function": {
+            "name": "get_dividends_history",
+            "description": "Retorna histórico de dividendos e splits dos últimos 3 anos, dividend yield atual e payout ratio.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Código da ação"}
+                },
+                "required": ["ticker"],
             },
-            "required": ["ticker"],
         },
     },
     {
-        "name": "calculate_investment_metrics",
-        "description": "Calcula métricas avançadas de investimento: Graham Number, margem de segurança, score de qualidade (0-100), nível de risco e análise de valuation.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ticker": {"type": "string", "description": "Código da ação"},
-                "preco_alvo": {
-                    "type": "number",
-                    "description": "Preço alvo personalizado para calcular margem de segurança (opcional)",
+        "type": "function",
+        "function": {
+            "name": "calculate_investment_metrics",
+            "description": "Calcula métricas avançadas de investimento: Graham Number, margem de segurança, score de qualidade (0-100), nível de risco e análise de valuation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Código da ação"},
+                    "preco_alvo": {
+                        "type": "number",
+                        "description": "Preço alvo personalizado para calcular margem de segurança (opcional)",
+                    },
                 },
+                "required": ["ticker"],
             },
-            "required": ["ticker"],
         },
     },
     {
-        "name": "get_technical_indicators",
-        "description": "Calcula indicadores técnicos completos: RSI (14), MACD (12,26,9), Bollinger Bands (20,2), médias móveis (SMA 20/50/200), suportes/resistências, sinais de trading e tendência geral.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "ticker": {"type": "string", "description": "Código da ação"},
-                "period": {
-                    "type": "string",
-                    "description": "Período de análise: 3mo, 6mo, 1y, 2y (padrão: 6mo)",
-                    "default": "6mo",
+        "type": "function",
+        "function": {
+            "name": "get_technical_indicators",
+            "description": "Calcula indicadores técnicos completos: RSI (14), MACD (12,26,9), Bollinger Bands (20,2), médias móveis (SMA 20/50/200), suportes/resistências, sinais de trading e tendência geral.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "ticker": {"type": "string", "description": "Código da ação"},
+                    "period": {
+                        "type": "string",
+                        "description": "Período de análise: 3mo, 6mo, 1y, 2y (padrão: 6mo)",
+                        "default": "6mo",
+                    },
                 },
+                "required": ["ticker"],
             },
-            "required": ["ticker"],
         },
     },
     {
-        "name": "screen_stocks",
-        "description": "Filtra e rankeia ações por estratégia de investimento. Estratégias: 'value' (baixo P/E e P/B), 'growth' (alto crescimento), 'dividend' (alto yield), 'momentum' (tendência de alta), 'quality' (alto ROE e margens), 'undervalued' (preço abaixo do justo). Mercados: 'us' (EUA), 'br' (Brasil), 'fiis' (FIIs brasileiros).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "strategy": {
-                    "type": "string",
-                    "description": "Estratégia: value, growth, dividend, momentum, quality, undervalued",
+        "type": "function",
+        "function": {
+            "name": "screen_stocks",
+            "description": "Filtra e rankeia ações por estratégia de investimento. Estratégias: 'value' (baixo P/E e P/B), 'growth' (alto crescimento), 'dividend' (alto yield), 'momentum' (tendência de alta), 'quality' (alto ROE e margens), 'undervalued' (preço abaixo do justo). Mercados: 'us' (EUA), 'br' (Brasil), 'fiis' (FIIs brasileiros).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "strategy": {
+                        "type": "string",
+                        "description": "Estratégia: value, growth, dividend, momentum, quality, undervalued",
+                    },
+                    "market": {
+                        "type": "string",
+                        "description": "Mercado: us, br, fiis (padrão: us)",
+                        "default": "us",
+                    },
+                    "custom_tickers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista de tickers personalizada (opcional, sobrescreve market)",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Número máximo de resultados (padrão: 10)",
+                        "default": 10,
+                    },
                 },
-                "market": {
-                    "type": "string",
-                    "description": "Mercado: us, br, fiis (padrão: us)",
-                    "default": "us",
-                },
-                "custom_tickers": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Lista de tickers personalizada (opcional, sobrescreve market)",
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Número máximo de resultados (padrão: 10)",
-                    "default": 10,
-                },
+                "required": ["strategy"],
             },
-            "required": ["strategy"],
         },
     },
     {
-        "name": "analyze_portfolio",
-        "description": "Analisa uma carteira de investimentos: retorno, volatilidade, Sharpe ratio, correlação entre ativos, diversificação, max drawdown e sugestões de melhoria.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "tickers": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Lista de tickers da carteira (mínimo 2)",
+        "type": "function",
+        "function": {
+            "name": "analyze_portfolio",
+            "description": "Analisa uma carteira de investimentos: retorno, volatilidade, Sharpe ratio, correlação entre ativos, diversificação, max drawdown e sugestões de melhoria.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tickers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista de tickers da carteira (mínimo 2)",
+                    },
+                    "weights": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "description": "Pesos de cada ativo (devem somar 1.0). Se omitido, assume pesos iguais.",
+                    },
+                    "period": {
+                        "type": "string",
+                        "description": "Período de análise: 1mo, 3mo, 6mo, 1y, 2y, 5y (padrão: 1y)",
+                        "default": "1y",
+                    },
                 },
-                "weights": {
-                    "type": "array",
-                    "items": {"type": "number"},
-                    "description": "Pesos de cada ativo (devem somar 1.0). Se omitido, assume pesos iguais.",
-                },
-                "period": {
-                    "type": "string",
-                    "description": "Período de análise: 1mo, 3mo, 6mo, 1y, 2y, 5y (padrão: 1y)",
-                    "default": "1y",
-                },
+                "required": ["tickers"],
             },
-            "required": ["tickers"],
         },
     },
 ]
@@ -238,17 +269,17 @@ def _execute_tool(name: str, tool_input: dict) -> str:
 
 class InvestmentAdvisor:
     """
-    Advisor de investimentos com memória de conversa e tool use via Claude.
+    Advisor de investimentos com memória de conversa e tool use via DeepSeek.
     """
 
     def __init__(self, api_key: str | None = None):
-        key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        key = api_key or os.environ.get("DEEPSEEK_API_KEY")
         if not key:
             raise ValueError(
-                "ANTHROPIC_API_KEY não definida. "
+                "DEEPSEEK_API_KEY não definida. "
                 "Configure no arquivo .env ou exporte a variável de ambiente."
             )
-        self.client = anthropic.Anthropic(api_key=key)
+        self.client = OpenAI(api_key=key, base_url=BASE_URL)
         self.conversation: list[dict] = []
 
     def reset_conversation(self):
@@ -264,56 +295,47 @@ class InvestmentAdvisor:
         full_response = ""
 
         while True:
-            with self.client.messages.stream(
+            response = self.client.chat.completions.create(
                 model=MODEL,
                 max_tokens=8192,
-                thinking={"type": "adaptive"},
-                system=SYSTEM_PROMPT,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    *self.conversation,
+                ],
                 tools=TOOLS,
-                messages=self.conversation,
-            ) as stream:
-                response = stream.get_final_message()
+            )
 
-            # Processar conteúdo da resposta
-            tool_uses = []
-            text_parts = []
+            message = response.choices[0].message
 
-            for block in response.content:
-                if block.type == "text":
-                    text_parts.append(block.text)
-                    if on_text:
-                        on_text(block.text)
-                elif block.type == "tool_use":
-                    tool_uses.append(block)
-
-            if text_parts:
-                full_response = "\n".join(text_parts)
+            # Extrair texto da resposta
+            if message.content:
+                full_response = message.content
+                if on_text:
+                    on_text(message.content)
 
             # Sem tool calls → conversa encerrada
-            if response.stop_reason == "end_turn" or not tool_uses:
-                # Adicionar resposta do assistente ao histórico
+            if not message.tool_calls:
                 self.conversation.append(
-                    {"role": "assistant", "content": response.content}
+                    {"role": "assistant", "content": message.content or ""}
                 )
                 break
 
-            # Executar ferramentas e continuar
-            self.conversation.append(
-                {"role": "assistant", "content": response.content}
-            )
+            # Adicionar resposta do assistente (com tool_calls) ao histórico
+            self.conversation.append(message.model_dump())
 
-            tool_results = []
-            for tool_use in tool_uses:
-                result = _execute_tool(tool_use.name, tool_use.input)
-                tool_results.append(
+            # Executar ferramentas e adicionar resultados
+            for tool_call in message.tool_calls:
+                func_name = tool_call.function.name
+                func_args = json.loads(tool_call.function.arguments)
+                result = _execute_tool(func_name, func_args)
+
+                self.conversation.append(
                     {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use.id,
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
                         "content": result,
                     }
                 )
-
-            self.conversation.append({"role": "user", "content": tool_results})
 
         return full_response
 
