@@ -4,6 +4,7 @@ Cada função retorna dados estruturados para análise via IA.
 """
 
 import json
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -13,6 +14,22 @@ try:
     YFINANCE_AVAILABLE = True
 except ImportError:
     YFINANCE_AVAILABLE = False
+
+
+def _fetch_ticker_info(ticker: str, retries: int = 2) -> dict:
+    """Busca info de um ticker com retry automático."""
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            info = yf.Ticker(ticker).info
+            if info and info.get("regularMarketPrice") is not None:
+                return info
+            return {}
+        except Exception as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(1 * (attempt + 1))
+    raise last_err or RuntimeError(f"Falha ao buscar {ticker}")
 
 
 def _check_yfinance():
@@ -31,10 +48,9 @@ def get_stock_overview(ticker: str) -> dict[str, Any]:
         return err
 
     try:
-        stock = yf.Ticker(ticker.upper())
-        info = stock.info
+        info = _fetch_ticker_info(ticker.upper())
 
-        if not info or info.get("regularMarketPrice") is None:
+        if not info:
             return {"erro": f"Ticker '{ticker}' não encontrado ou sem dados disponíveis."}
 
         current_price = info.get("currentPrice") or info.get("regularMarketPrice", 0)

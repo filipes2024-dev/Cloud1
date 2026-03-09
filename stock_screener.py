@@ -3,6 +3,8 @@ Stock Screener — filtra ações por estratégia de investimento.
 Estratégias pré-definidas: Value, Growth, Dividend, Momentum e Custom.
 """
 
+import sys
+import time
 from typing import Any
 
 try:
@@ -44,14 +46,20 @@ def _check():
     return None
 
 
-def _fetch_info(ticker: str) -> dict | None:
-    """Busca info de um ticker, retorna None em caso de erro."""
-    try:
-        info = yf.Ticker(ticker).info
-        if info and info.get("regularMarketPrice") is not None:
-            return info
-    except Exception:
-        pass
+def _fetch_info(ticker: str, retries: int = 2) -> dict | None:
+    """Busca info de um ticker com retry, retorna None em caso de erro."""
+    for attempt in range(retries + 1):
+        try:
+            info = yf.Ticker(ticker).info
+            if info and info.get("regularMarketPrice") is not None:
+                return info
+            print(f"  [screener] {ticker}: sem dados de preço", file=sys.stderr)
+            return None
+        except Exception as e:
+            if attempt < retries:
+                time.sleep(1 * (attempt + 1))
+            else:
+                print(f"  [screener] {ticker}: erro após {retries + 1} tentativas - {e}", file=sys.stderr)
     return None
 
 
@@ -104,25 +112,35 @@ def screen_stocks(
 
     # Coletar dados
     stocks_data = []
+    failed_tickers = []
     for ticker in universe:
         info = _fetch_info(ticker)
         if info:
             stocks_data.append(info)
+        else:
+            failed_tickers.append(ticker)
 
     if not stocks_data:
-        return {"erro": "Nenhum dado obtido para o universo selecionado."}
+        return {
+            "erro": f"Nenhum dado obtido para o universo selecionado. "
+            f"{len(failed_tickers)} tickers falharam: {', '.join(failed_tickers[:10])}. "
+            "Possíveis causas: sem conexão com internet, yfinance bloqueado ou tickers inválidos."
+        }
 
     # Filtrar e rankear
     results = screen_fn(stocks_data)
     results = results[:limit]
 
-    return {
+    resultado = {
         "estrategia": strategy,
         "mercado": market,
         "total_analisados": len(stocks_data),
         "resultados": results,
         "criterios": _get_criteria_description(strategy),
     }
+    if failed_tickers:
+        resultado["tickers_sem_dados"] = len(failed_tickers)
+    return resultado
 
 
 def _screen_value(stocks: list[dict]) -> list[dict]:

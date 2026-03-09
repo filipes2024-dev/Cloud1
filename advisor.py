@@ -263,8 +263,14 @@ def _execute_tool(name: str, tool_input: dict) -> str:
     func = TOOL_FUNCTIONS.get(name)
     if not func:
         return json.dumps({"erro": f"Ferramenta '{name}' não encontrada"})
-    result = func(**tool_input)
-    return json.dumps(result, ensure_ascii=False, default=str)
+    try:
+        result = func(**tool_input)
+        return json.dumps(result, ensure_ascii=False, default=str)
+    except Exception as e:
+        return json.dumps(
+            {"erro": f"Erro ao executar '{name}': {type(e).__name__}: {e}"},
+            ensure_ascii=False,
+        )
 
 
 class InvestmentAdvisor:
