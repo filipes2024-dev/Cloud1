@@ -23,7 +23,7 @@ def save_markdown_report(content: str, title: str, ticker: str = "") -> str:
     header = f"""# {title}
 
 > Gerado em: {datetime.now().strftime("%d/%m/%Y às %H:%M")}
-> Ferramenta: Investment Analysis Framework - Powered by Claude Opus 4.6
+> Ferramenta: Investment Analysis Framework - Powered by DeepSeek AI
 
 ---
 
@@ -45,14 +45,14 @@ def print_welcome():
         title = Text()
         title.append("Investment Analysis Framework", style="bold green")
         title.append("\n")
-        title.append("Powered by Claude Opus 4.6 + Dados Financeiros em Tempo Real", style="dim")
+        title.append("Powered by DeepSeek AI + Dados Financeiros em Tempo Real", style="dim")
 
         console.print(Panel(title, border_style="green", padding=(1, 4)))
         console.print()
     except ImportError:
         print("=" * 60)
         print("  Investment Analysis Framework")
-        print("  Powered by Claude Opus 4.6")
+        print("  Powered by DeepSeek AI")
         print("=" * 60)
         print()
 
